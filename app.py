@@ -46,13 +46,12 @@ def get_location(ip: str):
 def fetch_weather(lat, lon, tz):
     start = date.today()
     end = start + timedelta(days=16)
-    tz_encoded = tz.replace("/", "%2F")
     url = (
         f"https://api.open-meteo.com/v1/forecast?"
         f"latitude={lat}&longitude={lon}"
         f"&daily=temperature_2m_max,temperature_2m_min,precipitation_sum"
         f"&start_date={start.isoformat()}&end_date={end.isoformat()}"
-        f"&timezone={tz_encoded}"
+        f"&timezone=auto"
     )
     try:
         r = requests.get(url, timeout=15)
@@ -151,5 +150,6 @@ def chat():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
 
 
