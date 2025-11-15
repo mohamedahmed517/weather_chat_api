@@ -10,7 +10,7 @@ from flask import Flask, request, jsonify
 app = Flask(__name__)
 CORS(app)
 
-GEMINI_API_KEY = os.environ.get("AIzaSyDLZHwrN889sw8ZQawZd3XuKOUpiD8MLHI")
+GEMINI_API_KEY = os.environ.get("AIzaSyDJmIsuOH79bC9IVDjQgC_VsWe_jl9MMpo")
 
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
@@ -130,3 +130,4 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
 
     app.run(host="0.0.0.0", port=port)
+
