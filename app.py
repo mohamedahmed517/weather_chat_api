@@ -43,9 +43,9 @@ def get_location(ip: str):
         return None
 
 # ====================== جلب الطقس ======================
-def fetch_weather(lat, lon, tz):
+def fetch_weather(lat, lon):
     start = date.today()
-    end = start + timedelta(days=16)
+    end = start + timedelta(days=13)
     url = (
         f"https://api.open-meteo.com/v1/forecast?"
         f"latitude={lat}&longitude={lon}"
@@ -150,6 +150,7 @@ def chat():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
 
 
 
