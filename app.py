@@ -1,23 +1,28 @@
+# app.py - Weather Chat AI (FINAL VERSION - NO ERRORS)
 import os
 import re
 import requests
+import json
 from datetime import date, timedelta
 from flask import Flask, request, jsonify
-from flask_cors import CORS # type: ignore
+from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)
 
+# ====================== Gemini REST API ======================
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyCPlscgXwy6CtQ1Co_fUxuuIvZCNXQU_Qc")
 GEMINI_URL = f"https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
 
+# ====================== كشف الـ IP ======================
 IPV4_PRIVATE = re.compile(r'^(127\.0\.0\.1|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)')
 
 def is_private_ip(ip: str) -> bool:
     return bool(IPV4_PRIVATE.match(ip))
 
 def get_user_ip() -> str:
-    headers = ["CF-Connecting-IP", "True-Client-IP", "X-Real-IP", "X-Forwarded-For", "X-Client-IP", "Forwarded"]
+    headers = ["CF-Connecting-IP", "True-Client-IP", "X-Real-IP",
+               "X-Forwarded-For", "X-Client-IP", "Forwarded"]
     for h in headers:
         val = request.headers.get(h)
         if val:
@@ -27,25 +32,25 @@ def get_user_ip() -> str:
                     return ip
     return request.remote_addr or "127.0.0.1"
 
+# ====================== موقع المستخدم ======================
 def get_location(ip: str):
     try:
         r = requests.get(f"https://ipwho.is/{ip}", timeout=8)
         r.raise_for_status()
         d = r.json()
         return {
-            "city": d.get("city"),
+            "city": d.get("city", "غير معروف"),
             "lat": d.get("latitude"),
-            "lon": d.get("longitude"),
-            "timezone": d.get("timezone", {}).get("id", "Africa/Cairo")
+            "lon": d.get("longitude")
         }
     except Exception as e:
         print(f"فشل تحديد الموقع: {e}")
         return None
 
-# ====================== جلب الطقس ======================
-def fetch_weather(lat, lon):
+# ====================== جلب الطقس (14 يوم + timezone=auto) ======================
+def fetch_weather(lat, lon):  # ← 2 arguments فقط
     start = date.today()
-    end = start + timedelta(days=13)
+    end = start + timedelta(days=13)  # 14 يوم
     url = (
         f"https://api.open-meteo.com/v1/forecast?"
         f"latitude={lat}&longitude={lon}"
@@ -70,7 +75,7 @@ def suggest_outfit(temp, rain):
     if temp < 32: return "دافئ – تيشيرت خفيف"
     return "حر – شورت ومياه كتير"
 
-# ====================== استدعاء Gemini عبر REST ======================
+# ====================== استدعاء Gemini ======================
 def gemini_generate(prompt: str) -> str:
     payload = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
@@ -108,13 +113,14 @@ def chat():
             return jsonify({"error": "لا يمكن تحديد موقعك"}), 400
 
         city = location["city"]
-        weather_data = fetch_weather(location["lat"], location["lon"], location["timezone"])
+        # ← السطر الصحيح: بدون tz
+        weather_data = fetch_weather(location["lat"], location["lon"])
         if not weather_data:
             return jsonify({"error": "لا يوجد بيانات طقس"}), 500
 
         today = date.today()
         forecast_lines = []
-        for i in range(min(7, len(weather_data["time"]))):
+        for i in range(min(14, len(weather_data["time"]))):
             d = (today + timedelta(days=i)).strftime("%d-%m")
             t_max = weather_data["temperature_2m_max"][i]
             t_min = weather_data["temperature_2m_min"][i]
@@ -128,7 +134,7 @@ def chat():
         prompt = f"""
 أنت مساعد ذكي، ودود، ومصري أصيل. تتكلم بالعامية المصرية.
 المستخدم في: {city}
-توقعات الطقس:
+توقعات الطقس (14 يوم):
 {forecast_text}
 
 الرسالة: "{user_message}"
@@ -150,7 +156,3 @@ def chat():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-
-
-
-
