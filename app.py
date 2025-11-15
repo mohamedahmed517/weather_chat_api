@@ -1,23 +1,15 @@
-# app.py
 import os
 import re
 import requests
-from flask_cors import CORS # type: ignore
-import google.generativeai as genai
 from datetime import date, timedelta
 from flask import Flask, request, jsonify
+from flask_cors import CORS # type: ignore
 
 app = Flask(__name__)
 CORS(app)
 
-GEMINI_API_KEY = os.environ.get("AIzaSyDJmIsuOH79bC9IVDjQgC_VsWe_jl9MMpo")
-
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    gemini_model = genai.GenerativeModel('gemini-1.5-flash')
-else:
-    gemini_model = None
-    print("تحذير: GEMINI_API_KEY غير موجود")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyCPlscgXwy6CtQ1Co_fUxuuIvZCNXQU_Qc")
+GEMINI_URL = f"https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
 
 IPV4_PRIVATE = re.compile(r'^(127\.0\.0\.1|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)')
 
@@ -37,18 +29,19 @@ def get_user_ip() -> str:
 
 def get_location(ip: str):
     try:
-        r = requests.get(f"http://ip-api.com/json/{ip}?fields=city,lat,lon,timezone", timeout=8)
+        r = requests.get(f"https://ipwho.is/{ip}", timeout=8)
         r.raise_for_status()
         d = r.json()
         return {
-            "city": d.get("city", "غير معروف"),
-            "lat": d.get("lat"),
-            "lon": d.get("lon"),
-            "timezone": d.get("timezone", "Africa/Cairo")
+            "lat": d.get("latitude"),
+            "lon": d.get("longitude"),
+            "timezone": d.get("timezone", {}).get("id", "Africa/Cairo")
         }
-    except:
+    except Exception as e:
+        print(f"فشل تحديد الموقع: {e}")
         return None
 
+# ====================== جلب الطقس ======================
 def fetch_weather(lat, lon, tz):
     start = date.today()
     end = start + timedelta(days=16)
@@ -57,9 +50,11 @@ def fetch_weather(lat, lon, tz):
         r = requests.get(url, timeout=15)
         r.raise_for_status()
         return r.json()["daily"]
-    except:
+    except Exception as e:
+        print(f"فشل جلب الطقس: {e}")
         return None
 
+# ====================== نصيحة ملابس ======================
 def suggest_outfit(temp, rain):
     if rain > 2.0: return "مطر – خُد شمسية"
     if temp < 10: return "برد جدًا – جاكيت تقيل"
@@ -68,15 +63,33 @@ def suggest_outfit(temp, rain):
     if temp < 32: return "دافئ – تيشيرت خفيف"
     return "حر – شورت ومياه كتير"
 
+# ====================== استدعاء Gemini عبر REST ======================
+def gemini_generate(prompt: str) -> str:
+    payload = {
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "temperature": 0.7,
+            "topK": 40,
+            "topP": 0.95,
+            "maxOutputTokens": 1024
+        }
+    }
+    try:
+        r = requests.post(GEMINI_URL, json=payload, timeout=20)
+        r.raise_for_status()
+        data = r.json()
+        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+    except Exception as e:
+        print(f"خطأ في Gemini: {e}")
+        return "عذرًا، فيه مشكلة في الرد. حاول تاني!"
+
+# ====================== Routes ======================
 @app.route("/")
 def home():
-    return jsonify({"message": "Weather Chat AI شغال!", "endpoint": "/api/chat"})
+    return jsonify({"message": "Weather Chat AI شغال 100%!", "endpoint": "/api/chat"})
 
 @app.route("/api/chat", methods=["POST"])
 def chat():
-    if not gemini_model:
-        return jsonify({"error": "الدردشة غير مفعلة – مفتاح Gemini مفقود"}), 503
-
     try:
         user_message = request.json.get("message", "").strip()
         if not user_message:
@@ -106,7 +119,7 @@ def chat():
         forecast_text = "\n".join(forecast_lines)
 
         prompt = f"""
-أنت مساعد ذكي، ودود، ومصري أصيل.
+أنت مساعد ذكي، ودود، ومصري أصيل. تتكلم بالعامية المصرية.
 المستخدم في: {city}
 توقعات الطقس:
 {forecast_text}
@@ -115,7 +128,7 @@ def chat():
 رد بطريقة طبيعية، ممتعة، ومفيدة. لا تذكر أنك AI.
 """
 
-        ai_reply = gemini_model.generate_content(prompt).text.strip()
+        ai_reply = gemini_generate(prompt)
 
         return jsonify({
             "reply": ai_reply,
@@ -124,10 +137,9 @@ def chat():
         })
 
     except Exception as e:
-        return jsonify({"error": f"خطأ: {str(e)}"}), 500
+        print(f"خطأ عام: {e}")
+        return jsonify({"error": "خطأ داخلي"}), 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-
     app.run(host="0.0.0.0", port=port)
-
