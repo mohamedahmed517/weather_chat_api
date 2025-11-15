@@ -33,6 +33,7 @@ def get_location(ip: str):
         r.raise_for_status()
         d = r.json()
         return {
+            "city": d.get("city"),
             "lat": d.get("latitude"),
             "lon": d.get("longitude"),
             "timezone": d.get("timezone", {}).get("id", "Africa/Cairo")
@@ -143,3 +144,4 @@ def chat():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
